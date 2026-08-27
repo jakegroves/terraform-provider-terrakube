@@ -100,9 +100,13 @@ func (r *WorkspaceCliResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"module_ssh_key": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "SSH key ID (see terrakube_ssh) used to download private Terraform/OpenTofu modules " +
 					"referenced via git-based module sources within this workspace. Leave unset to leave any " +
 					"existing value untouched; set to an empty string to clear it.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -164,7 +168,7 @@ func (r *WorkspaceCliResource) Create(ctx context.Context, req resource.CreateRe
 		bodyRequest.Project = &client.ProjectEntity{ID: plan.ProjectId.ValueString()}
 	}
 
-	if !plan.ModuleSshKey.IsNull() {
+	if !plan.ModuleSshKey.IsNull() && !plan.ModuleSshKey.IsUnknown() {
 		bodyRequest.ModuleSshKey = plan.ModuleSshKey.ValueStringPointer()
 	}
 
@@ -315,7 +319,7 @@ func (r *WorkspaceCliResource) Update(ctx context.Context, req resource.UpdateRe
 		bodyRequest.Project = &client.ProjectEntity{ID: plan.ProjectId.ValueString()}
 	}
 
-	if !plan.ModuleSshKey.IsNull() {
+	if !plan.ModuleSshKey.IsNull() && !plan.ModuleSshKey.IsUnknown() {
 		bodyRequest.ModuleSshKey = plan.ModuleSshKey.ValueStringPointer()
 	}
 

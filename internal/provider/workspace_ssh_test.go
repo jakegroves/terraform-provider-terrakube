@@ -326,6 +326,107 @@ func TestWorkspaceCliResource_Create_SendsModuleSshKeyAttribute(t *testing.T) {
 	}
 }
 
+// TestWorkspaceVcsResource_ModuleSshKey_SchemaIsOptionalComputed guards the
+// fix for a "Provider produced inconsistent result after apply" bug: when
+// module_ssh_key was Optional-only and left unset, Terraform's plan carried
+// it as null, but the API echoes it back as "" after apply, so Create wrote
+// "" over a planned null and the framework rejected the result. Making the
+// attribute Optional+Computed (with UseStateForUnknown so it doesn't churn
+// on every plan) lets the final value differ from the config.
+func TestWorkspaceVcsResource_ModuleSshKey_SchemaIsOptionalComputed(t *testing.T) {
+	ctx := context.Background()
+	s, _ := workspaceVcsSchemaAndType(t, ctx)
+
+	attr, ok := s.Attributes["module_ssh_key"].(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected module_ssh_key to be a StringAttribute, got %T", s.Attributes["module_ssh_key"])
+	}
+	if !attr.Optional {
+		t.Error("expected module_ssh_key to be Optional")
+	}
+	if !attr.Computed {
+		t.Error("expected module_ssh_key to be Computed so the API's \"\" echo doesn't conflict with a planned null")
+	}
+	if len(attr.PlanModifiers) == 0 {
+		t.Error("expected module_ssh_key to carry a UseStateForUnknown plan modifier so it doesn't show (known after apply) on every plan")
+	}
+}
+
+// TestWorkspaceVcsResource_Create_ResolvesModuleSshKeyWhenApiEchoesEmptyString
+// reproduces the reported scenario: module_ssh_key is left unset (Terraform
+// passes it as unknown for an Optional+Computed attribute) and the API
+// returns "" for it. Create must resolve it to a concrete, known value
+// rather than erroring or leaving it unknown.
+func TestWorkspaceVcsResource_Create_ResolvesModuleSshKeyWhenApiEchoesEmptyString(t *testing.T) {
+	ctx := context.Background()
+	s, objType := workspaceVcsSchemaAndType(t, ctx)
+
+	const orgID = "org-1"
+
+	var capturedBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/organization/"+orgID+"/workspace", func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("reading request body: %v", err)
+		}
+		capturedBody = body
+		fmt.Fprint(w, `{"data":{"type":"workspace","id":"ws-created-1","attributes":{`+
+			`"name":"my-workspace","description":null,"source":"https://example.com/repo.git",`+
+			`"branch":"main","folder":"/","defaultTemplate":"tmpl-1","iacType":"terraform",`+
+			`"terraformVersion":"1.12.0","executionMode":"remote","allowRemoteApply":false,`+
+			`"moduleSshKey":""},`+
+			`"relationships":{"project":{"data":null}}}}`)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	r := &WorkspaceVcsResource{
+		client:   server.Client(),
+		endpoint: server.URL,
+		token:    "test-token",
+	}
+
+	planValue := buildObjectValue(objType, map[string]tftypes.Value{
+		"organization_id":    tftypes.NewValue(tftypes.String, orgID),
+		"name":               tftypes.NewValue(tftypes.String, "my-workspace"),
+		"repository":         tftypes.NewValue(tftypes.String, "https://example.com/repo.git"),
+		"template_id":        tftypes.NewValue(tftypes.String, "tmpl-1"),
+		"iac_version":        tftypes.NewValue(tftypes.String, "1.12.0"),
+		"branch":             tftypes.NewValue(tftypes.String, "main"),
+		"folder":             tftypes.NewValue(tftypes.String, "/"),
+		"iac_type":           tftypes.NewValue(tftypes.String, "terraform"),
+		"execution_mode":     tftypes.NewValue(tftypes.String, "remote"),
+		"allow_remote_apply": tftypes.NewValue(tftypes.Bool, false),
+		// Left unset in config -> Terraform passes unknown for Optional+Computed.
+		"module_ssh_key": tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		"project_id":     tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+	})
+
+	req := resource.CreateRequest{Plan: tfsdk.Plan{Schema: s, Raw: planValue}}
+	resp := &resource.CreateResponse{State: tfsdk.State{Schema: s}}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Create returned diagnostics: %v", resp.Diagnostics)
+	}
+
+	if strings.Contains(string(capturedBody), "moduleSshKey") {
+		t.Errorf("expected request body to omit moduleSshKey when it is unset, got: %s", capturedBody)
+	}
+
+	var result WorkspaceVcsResourceModel
+	if diags := resp.State.Get(ctx, &result); diags.HasError() {
+		t.Fatalf("reading resulting state: %v", diags)
+	}
+
+	if result.ModuleSshKey.IsUnknown() {
+		t.Error("expected module_ssh_key to be resolved to a known value after create (Terraform's protocol rejects unknown values after apply)")
+	}
+}
+
 // TestWorkspaceVcsResource_VcsIdAndSshId_AreMutuallyExclusive exercises the
 // actual ConflictsWith validators wired onto vcs_id and ssh_id: a workspace
 // clones its source either via an OAuth vcs connection or a raw SSH key,

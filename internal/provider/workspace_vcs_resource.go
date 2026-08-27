@@ -149,10 +149,14 @@ func (r *WorkspaceVcsResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"module_ssh_key": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "SSH key ID (see terrakube_ssh) used to download private Terraform/OpenTofu modules " +
 					"referenced via git-based module sources within this workspace. This key is not used to clone " +
 					"the workspace repository itself; use vcs_id or ssh_id for that. Leave unset to leave any " +
 					"existing value untouched; set to an empty string to clear it.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"allow_remote_apply": schema.BoolAttribute{
 				Optional:    true,
@@ -237,7 +241,7 @@ func (r *WorkspaceVcsResource) Create(ctx context.Context, req resource.CreateRe
 		bodyRequest.Ssh = &client.SshEntity{ID: plan.SshId.ValueString()}
 	}
 
-	if !plan.ModuleSshKey.IsNull() {
+	if !plan.ModuleSshKey.IsNull() && !plan.ModuleSshKey.IsUnknown() {
 		bodyRequest.ModuleSshKey = plan.ModuleSshKey.ValueStringPointer()
 	}
 
@@ -439,7 +443,7 @@ func (r *WorkspaceVcsResource) Update(ctx context.Context, req resource.UpdateRe
 		bodyRequest.Ssh = &client.SshEntity{ID: plan.SshId.ValueString()}
 	}
 
-	if !plan.ModuleSshKey.IsNull() {
+	if !plan.ModuleSshKey.IsNull() && !plan.ModuleSshKey.IsUnknown() {
 		bodyRequest.ModuleSshKey = plan.ModuleSshKey.ValueStringPointer()
 	}
 
