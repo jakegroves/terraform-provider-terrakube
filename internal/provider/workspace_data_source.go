@@ -29,23 +29,24 @@ type WorkspaceDataSource struct {
 }
 
 type WorkspaceDataSourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Description      types.String `tfsdk:"description"`
-	Organization     types.String `tfsdk:"organization"`
-	OrganizationID   types.String `tfsdk:"organization_id"`
-	Source           types.String `tfsdk:"source"`
-	Branch           types.String `tfsdk:"branch"`
-	Folder           types.String `tfsdk:"folder"`
-	TemplateID       types.String `tfsdk:"template_id"`
-	IaCType          types.String `tfsdk:"iactype"`
-	IaCVersion       types.String `tfsdk:"iacversion"`
-	ExecutionMode    types.String `tfsdk:"executionmode"`
-	Deleted          types.Bool   `tfsdk:"deleted"`
-	AllowRemoteApply types.Bool   `tfsdk:"allowremoteapply"`
-	VCSID            types.String `tfsdk:"vcsid"`
-	SSHID            types.String `tfsdk:"sshid"`
-	ModuleSshKey     types.String `tfsdk:"module_ssh_key"`
+	ID                     types.String `tfsdk:"id"`
+	Name                   types.String `tfsdk:"name"`
+	Description            types.String `tfsdk:"description"`
+	Organization           types.String `tfsdk:"organization"`
+	OrganizationID         types.String `tfsdk:"organization_id"`
+	Source                 types.String `tfsdk:"source"`
+	Branch                 types.String `tfsdk:"branch"`
+	Folder                 types.String `tfsdk:"folder"`
+	TemplateID             types.String `tfsdk:"template_id"`
+	IaCType                types.String `tfsdk:"iactype"`
+	IaCVersion             types.String `tfsdk:"iacversion"`
+	ExecutionMode          types.String `tfsdk:"executionmode"`
+	Deleted                types.Bool   `tfsdk:"deleted"`
+	AllowRemoteApply       types.Bool   `tfsdk:"allowremoteapply"`
+	VCSID                  types.String `tfsdk:"vcsid"`
+	SSHID                  types.String `tfsdk:"sshid"`
+	ModuleSshKey           types.String `tfsdk:"module_ssh_key"`
+	PolicyComplianceStatus types.String `tfsdk:"policy_compliance_status"`
 }
 
 func NewWorkspaceDataSource() datasource.DataSource {
@@ -162,6 +163,10 @@ func (d *WorkspaceDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 				Description: "SSH key ID used to download private Terraform/OpenTofu modules referenced via git-based module sources within this workspace",
 				Computed:    true,
 			},
+			"policy_compliance_status": schema.StringAttribute{
+				Description: "OPA Policy compliance status: UNKNOWN, COMPLIANT, NON_COMPLIANT, or EXEMPTED",
+				Computed:    true,
+			},
 		},
 	}
 }
@@ -267,6 +272,7 @@ func (d *WorkspaceDataSource) Read(ctx context.Context, req datasource.ReadReque
 			state.SSHID = types.StringValue(data.Ssh.ID)
 		}
 		state.ModuleSshKey = types.StringPointerValue(data.ModuleSshKey)
+		state.PolicyComplianceStatus = types.StringValue(data.PolicyComplianceStatus)
 	}
 
 	diags := resp.State.Set(ctx, &state)

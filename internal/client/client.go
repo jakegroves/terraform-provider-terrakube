@@ -40,6 +40,7 @@ type TeamEntity struct {
 	PlanJob          bool    `jsonapi:"attr,planJob"`
 	ApproveJob       bool    `jsonapi:"attr,approveJob"`
 	Role             *string `jsonapi:"attr,role"`
+	ManagePolicies   *bool   `jsonapi:"attr,managePolicies,omitempty"`
 }
 
 type TeamTokenEntity struct {
@@ -59,22 +60,23 @@ type HistoryEntity struct {
 }
 
 type WorkspaceEntity struct {
-	ID               string         `jsonapi:"primary,workspace"`
-	Name             string         `jsonapi:"attr,name"`
-	Description      *string        `jsonapi:"attr,description"`
-	Source           string         `jsonapi:"attr,source"`
-	Branch           string         `jsonapi:"attr,branch"`
-	Folder           string         `jsonapi:"attr,folder"`
-	TemplateId       string         `jsonapi:"attr,defaultTemplate"`
-	IaCType          string         `jsonapi:"attr,iacType"`
-	IaCVersion       string         `jsonapi:"attr,terraformVersion"`
-	ExecutionMode    string         `jsonapi:"attr,executionMode"`
-	Deleted          bool           `jsonapi:"attr,deleted"`
-	Vcs              *VcsEntity     `jsonapi:"relation,vcs,omitempty"`
-	Ssh              *SshEntity     `jsonapi:"relation,ssh,omitempty"`
-	Project          *ProjectEntity `jsonapi:"relation,project,omitempty"`
-	AllowRemoteApply bool           `jsonapi:"attr,allowRemoteApply"`
-	ModuleSshKey     *string        `jsonapi:"attr,moduleSshKey,omitempty"`
+	ID                     string         `jsonapi:"primary,workspace"`
+	Name                   string         `jsonapi:"attr,name"`
+	Description            *string        `jsonapi:"attr,description"`
+	Source                 string         `jsonapi:"attr,source"`
+	Branch                 string         `jsonapi:"attr,branch"`
+	Folder                 string         `jsonapi:"attr,folder"`
+	TemplateId             string         `jsonapi:"attr,defaultTemplate"`
+	IaCType                string         `jsonapi:"attr,iacType"`
+	IaCVersion             string         `jsonapi:"attr,terraformVersion"`
+	ExecutionMode          string         `jsonapi:"attr,executionMode"`
+	Deleted                bool           `jsonapi:"attr,deleted"`
+	Vcs                    *VcsEntity     `jsonapi:"relation,vcs,omitempty"`
+	Ssh                    *SshEntity     `jsonapi:"relation,ssh,omitempty"`
+	Project                *ProjectEntity `jsonapi:"relation,project,omitempty"`
+	AllowRemoteApply       bool           `jsonapi:"attr,allowRemoteApply"`
+	ModuleSshKey           *string        `jsonapi:"attr,moduleSshKey,omitempty"`
+	PolicyComplianceStatus string         `jsonapi:"attr,policyComplianceStatus,omitempty"`
 }
 
 type WorkspaceTagEntity struct {
@@ -294,4 +296,49 @@ type ErrorDetailEntity struct {
 
 type ErrorsEntity struct {
 	Errors []ErrorDetailEntity `json:"errors"`
+}
+
+type PolicySetEntity struct {
+	ID                        string                           `jsonapi:"primary,policy_set"`
+	Name                      string                           `jsonapi:"attr,name"`
+	Description               *string                          `jsonapi:"attr,description,omitempty"`
+	EnforcementLevel          string                           `jsonapi:"attr,enforcementLevel"`
+	ShadowEnforcementLevel    *string                          `jsonapi:"attr,shadowEnforcementLevel,omitempty"`
+	OverrideTeam              *string                          `jsonapi:"attr,overrideTeam,omitempty"`
+	Global                    bool                             `jsonapi:"attr,global"`
+	Repository                *string                          `jsonapi:"attr,repository,omitempty"`
+	Branch                    string                           `jsonapi:"attr,branch,omitempty"`
+	Folder                    string                           `jsonapi:"attr,folder,omitempty"`
+	Vcs                       *VcsEntity                       `jsonapi:"relation,vcs,omitempty"`
+	Organization              *OrganizationEntity              `jsonapi:"relation,organization,omitempty"`
+	NotificationConfiguration *NotificationConfigurationEntity `jsonapi:"relation,notificationConfiguration,omitempty"`
+	OpaVersion                *string                          `jsonapi:"attr,opaVersion,omitempty"`
+}
+
+type PolicyAttachmentEntity struct {
+	ID        string                 `jsonapi:"primary,policy_attachment"`
+	PolicySet *PolicySetEntity       `jsonapi:"relation,policySet,omitempty"`
+	Workspace *WorkspaceEntity       `jsonapi:"relation,workspace,omitempty"`
+	Project   *ProjectEntity         `jsonapi:"relation,project,omitempty"`
+	Tag       *OrganizationTagEntity `jsonapi:"relation,tag,omitempty"`
+}
+
+type PolicySetParameterEntity struct {
+	ID          string           `jsonapi:"primary,policy_set_parameter"`
+	Key         string           `jsonapi:"attr,key"`
+	Value       string           `jsonapi:"attr,value"`
+	Description *string          `jsonapi:"attr,description,omitempty"`
+	PolicySet   *PolicySetEntity `jsonapi:"relation,policySet,omitempty"`
+}
+
+type PolicyExemptionEntity struct {
+	ID              string              `jsonapi:"primary,policy_exemption"`
+	PolicySet       *PolicySetEntity    `jsonapi:"relation,policySet,omitempty"`
+	RuleId          string              `jsonapi:"attr,ruleId"`
+	Workspace       *WorkspaceEntity    `jsonapi:"relation,workspace,omitempty"`
+	Project         *ProjectEntity      `jsonapi:"relation,project,omitempty"`
+	TicketReference string              `jsonapi:"attr,ticketReference"`
+	Justification   string              `jsonapi:"attr,justification"`
+	ExpiresAt       *string             `jsonapi:"attr,expiresAt,omitempty"`
+	Organization    *OrganizationEntity `jsonapi:"relation,organization,omitempty"`
 }

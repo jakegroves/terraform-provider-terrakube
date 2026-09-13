@@ -37,22 +37,23 @@ type WorkspaceVcsResource struct {
 }
 
 type WorkspaceVcsResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	OrganizationId   types.String `tfsdk:"organization_id"`
-	Description      types.String `tfsdk:"description"`
-	IaCType          types.String `tfsdk:"iac_type"`
-	TemplateId       types.String `tfsdk:"template_id"`
-	IaCVersion       types.String `tfsdk:"iac_version"`
-	Repository       types.String `tfsdk:"repository"`
-	Branch           types.String `tfsdk:"branch"`
-	Folder           types.String `tfsdk:"folder"`
-	ExecutionMode    types.String `tfsdk:"execution_mode"`
-	VcsId            types.String `tfsdk:"vcs_id"`
-	SshId            types.String `tfsdk:"ssh_id"`
-	AllowRemoteApply types.Bool   `tfsdk:"allow_remote_apply"`
-	ProjectId        types.String `tfsdk:"project_id"`
-	ModuleSshKey     types.String `tfsdk:"module_ssh_key"`
+	ID                     types.String `tfsdk:"id"`
+	Name                   types.String `tfsdk:"name"`
+	OrganizationId         types.String `tfsdk:"organization_id"`
+	Description            types.String `tfsdk:"description"`
+	IaCType                types.String `tfsdk:"iac_type"`
+	TemplateId             types.String `tfsdk:"template_id"`
+	IaCVersion             types.String `tfsdk:"iac_version"`
+	Repository             types.String `tfsdk:"repository"`
+	Branch                 types.String `tfsdk:"branch"`
+	Folder                 types.String `tfsdk:"folder"`
+	ExecutionMode          types.String `tfsdk:"execution_mode"`
+	VcsId                  types.String `tfsdk:"vcs_id"`
+	SshId                  types.String `tfsdk:"ssh_id"`
+	AllowRemoteApply       types.Bool   `tfsdk:"allow_remote_apply"`
+	ProjectId              types.String `tfsdk:"project_id"`
+	ModuleSshKey           types.String `tfsdk:"module_ssh_key"`
+	PolicyComplianceStatus types.String `tfsdk:"policy_compliance_status"`
 }
 
 func NewWorkspaceVcsResource() resource.Resource {
@@ -171,6 +172,10 @@ func (r *WorkspaceVcsResource) Schema(ctx context.Context, req resource.SchemaRe
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"policy_compliance_status": schema.StringAttribute{
+				Computed:    true,
+				Description: "OPA Policy compliance status: UNKNOWN, COMPLIANT, NON_COMPLIANT, or EXEMPTED",
 			},
 		},
 	}
@@ -315,6 +320,7 @@ func (r *WorkspaceVcsResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	plan.ModuleSshKey = types.StringPointerValue(newWorkspaceVcs.ModuleSshKey)
+	plan.PolicyComplianceStatus = types.StringValue(newWorkspaceVcs.PolicyComplianceStatus)
 
 	if !plan.Folder.IsNull() {
 		plan.Folder = types.StringValue(newWorkspaceVcs.Folder)
@@ -392,6 +398,7 @@ func (r *WorkspaceVcsResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	state.ModuleSshKey = types.StringPointerValue(workspace.ModuleSshKey)
+	state.PolicyComplianceStatus = types.StringValue(workspace.PolicyComplianceStatus)
 
 	if workspace.Project != nil {
 		state.ProjectId = types.StringValue(workspace.Project.ID)
@@ -529,6 +536,7 @@ func (r *WorkspaceVcsResource) Update(ctx context.Context, req resource.UpdateRe
 		plan.SshId = types.StringNull()
 	}
 	plan.ModuleSshKey = types.StringPointerValue(workspace.ModuleSshKey)
+	plan.PolicyComplianceStatus = types.StringValue(workspace.PolicyComplianceStatus)
 	if workspace.Project != nil {
 		plan.ProjectId = types.StringValue(workspace.Project.ID)
 	} else {
