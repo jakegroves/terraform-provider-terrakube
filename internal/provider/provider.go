@@ -184,6 +184,7 @@ func (p *TerrakubeProvider) Resources(ctx context.Context) []func() resource.Res
 		NewWorkspaceWebhookEventResource,
 		NewVcsResource,
 		NewWorkspaceScheduleResource,
+		NewWorkspaceRunTriggerResource,
 		NewCollectionResource,
 		NewCollectionItemResource,
 		NewCollectionReferenceResource,
