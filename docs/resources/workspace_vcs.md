@@ -29,6 +29,10 @@ resource "terrakube_workspace_vcs" "sample1" {
   # Optional: use an org SSH key to download private Terraform/OpenTofu
   # modules referenced via git-based module sources in this workspace.
   module_ssh_key = terrakube_ssh.module_key.id
+
+  # Optional (Terrakube 2.34.0 or later): only allow apply and destroy from the
+  # branch above. Plan-only runs and terraform plan still work on any branch.
+  restrict_apply_to_configured_branch = true
 }
 
 # Repository accessed over raw SSH instead of an OAuth VCS connection.
@@ -68,6 +72,7 @@ resource "terrakube_workspace_vcs" "sample2" {
 - `iac_type` (String) Workspace VCS IaC type (Supported values terraform or tofu)
 - `module_ssh_key` (String) SSH key ID (see terrakube_ssh) used to download private Terraform/OpenTofu modules referenced via git-based module sources within this workspace. This key is not used to clone the workspace repository itself; use vcs_id or ssh_id for that. Leave unset to leave any existing value untouched; set to an empty string to clear it.
 - `project_id` (String) Id of the project this workspace belongs to. Leave unset to leave any existing project assignment (e.g. made outside Terraform) untouched.
+- `restrict_apply_to_configured_branch` (Boolean) Only allow apply and destroy from the configured branch. A run that can change infrastructure on any other branch, with a commit id, or from the Terraform CLI with local configuration is refused, while plan-only runs and terraform plan still work. Needs Terrakube 2.34.0 or later and a user who can manage workspaces in the whole organization. Leave unset to leave the existing value untouched.
 - `ssh_id` (String) SSH key ID (see terrakube_ssh) used to clone the workspace repository directly over SSH (e.g. git@github.com:org/repo.git), as an alternative to an OAuth-based VCS connection. Mutually exclusive with vcs_id. Leave unset to leave any existing SSH key assignment untouched.
 - `vcs_id` (String) VCS connection ID for private workspaces
 

@@ -94,3 +94,52 @@ func TestWorkspaceDataSource_PolicyComplianceStatus(t *testing.T) {
 		t.Errorf("PolicyComplianceStatus = %q, want COMPLIANT", state.PolicyComplianceStatus.ValueString())
 	}
 }
+
+func TestWorkspaceDataSource_RestrictApplyToConfiguredBranch(t *testing.T) {
+	for name, tc := range map[string]struct {
+		extra string
+		want  bool
+	}{
+		"restricted":              {`,"restrictApplyToConfiguredBranch":true`, true},
+		"not restricted":          {`,"restrictApplyToConfiguredBranch":false`, false},
+		"terrakube before 2.34.0": {``, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			s, objType := workspaceDataSourceSchemaAndType(t, ctx)
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v1/organization", func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, `{"data":[{"type":"organization","id":"org-1","attributes":{"name":"enterprise"}}]}`)
+			})
+			mux.HandleFunc("/api/v1/organization/org-1/workspace", func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, `{"data":[{"type":"workspace","id":"ws-1","attributes":{"name":"payments-core",`+
+					`"source":"https://github.com/org/payments","branch":"main","folder":"/",`+
+					`"terraformVersion":"1.15.8","executionMode":"remote"`+tc.extra+`}}]}`)
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			d := &WorkspaceDataSource{client: server.Client(), endpoint: server.URL, token: "test-token"}
+			configValue := buildObjectValue(objType, map[string]tftypes.Value{
+				"organization": tftypes.NewValue(tftypes.String, "enterprise"),
+				"name":         tftypes.NewValue(tftypes.String, "payments-core"),
+			})
+			req := datasource.ReadRequest{Config: tfsdk.Config{Schema: s, Raw: configValue}}
+			resp := &datasource.ReadResponse{State: tfsdk.State{Schema: s}}
+
+			d.Read(ctx, req, resp)
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+			}
+
+			var state WorkspaceDataSourceModel
+			if diags := resp.State.Get(ctx, &state); diags.HasError() {
+				t.Fatalf("reading state: %v", diags)
+			}
+			if state.RestrictApplyToConfiguredBranch.ValueBool() != tc.want {
+				t.Errorf("RestrictApplyToConfiguredBranch = %v, want %v", state.RestrictApplyToConfiguredBranch, tc.want)
+			}
+		})
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -54,6 +55,8 @@ type WorkspaceVcsResourceModel struct {
 	ProjectId              types.String `tfsdk:"project_id"`
 	ModuleSshKey           types.String `tfsdk:"module_ssh_key"`
 	PolicyComplianceStatus types.String `tfsdk:"policy_compliance_status"`
+
+	RestrictApplyToConfiguredBranch types.Bool `tfsdk:"restrict_apply_to_configured_branch"`
 }
 
 func NewWorkspaceVcsResource() resource.Resource {
@@ -165,6 +168,17 @@ func (r *WorkspaceVcsResource) Schema(ctx context.Context, req resource.SchemaRe
 				Default:     booldefault.StaticBool(false),
 				Description: "Wether to allow remote apply. By default false to respect VCS philosophy.",
 			},
+			"restrict_apply_to_configured_branch": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Only allow apply and destroy from the configured branch. A run that can change infrastructure " +
+					"on any other branch, with a commit id, or from the Terraform CLI with local configuration is refused, " +
+					"while plan-only runs and terraform plan still work. Needs Terrakube 2.34.0 or later and a user " +
+					"who can manage workspaces in the whole organization. Leave unset to leave the existing value untouched.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"project_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -236,6 +250,10 @@ func (r *WorkspaceVcsResource) Create(ctx context.Context, req resource.CreateRe
 		AllowRemoteApply: plan.AllowRemoteApply.ValueBool(),
 	}
 
+	if !plan.RestrictApplyToConfiguredBranch.IsNull() && !plan.RestrictApplyToConfiguredBranch.IsUnknown() {
+		bodyRequest.RestrictApplyToConfiguredBranch = plan.RestrictApplyToConfiguredBranch.ValueBoolPointer()
+	}
+
 	if !plan.VcsId.IsNull() {
 		tflog.Info(ctx, fmt.Sprintf("Workspace using Vcs connection id: %s", plan.VcsId.ValueString()))
 		bodyRequest.Vcs = &client.VcsEntity{ID: plan.VcsId.ValueString()}
@@ -302,6 +320,7 @@ func (r *WorkspaceVcsResource) Create(ctx context.Context, req resource.CreateRe
 	plan.TemplateId = types.StringValue(newWorkspaceVcs.TemplateId)
 	plan.ExecutionMode = types.StringValue(newWorkspaceVcs.ExecutionMode)
 	plan.AllowRemoteApply = types.BoolValue(newWorkspaceVcs.AllowRemoteApply)
+	plan.RestrictApplyToConfiguredBranch = restrictApplyValue(newWorkspaceVcs.RestrictApplyToConfiguredBranch)
 
 	if newWorkspaceVcs.Project != nil {
 		plan.ProjectId = types.StringValue(newWorkspaceVcs.Project.ID)
@@ -386,6 +405,7 @@ func (r *WorkspaceVcsResource) Read(ctx context.Context, req resource.ReadReques
 	state.IaCVersion = types.StringValue(workspace.IaCVersion)
 	state.ID = types.StringValue(workspace.ID)
 	state.AllowRemoteApply = types.BoolValue(workspace.AllowRemoteApply)
+	state.RestrictApplyToConfiguredBranch = restrictApplyValue(workspace.RestrictApplyToConfiguredBranch)
 
 	if workspace.Vcs != nil {
 		state.VcsId = types.StringValue(workspace.Vcs.ID)
@@ -438,6 +458,10 @@ func (r *WorkspaceVcsResource) Update(ctx context.Context, req resource.UpdateRe
 		Name:             plan.Name.ValueString(),
 		ID:               state.ID.ValueString(),
 		AllowRemoteApply: plan.AllowRemoteApply.ValueBool(),
+	}
+
+	if !plan.RestrictApplyToConfiguredBranch.IsNull() && !plan.RestrictApplyToConfiguredBranch.IsUnknown() {
+		bodyRequest.RestrictApplyToConfiguredBranch = plan.RestrictApplyToConfiguredBranch.ValueBoolPointer()
 	}
 
 	if !plan.VcsId.IsNull() {
@@ -527,6 +551,7 @@ func (r *WorkspaceVcsResource) Update(ctx context.Context, req resource.UpdateRe
 	plan.Folder = types.StringValue(workspace.Folder)
 	plan.TemplateId = types.StringValue(workspace.TemplateId)
 	plan.AllowRemoteApply = types.BoolValue(workspace.AllowRemoteApply)
+	plan.RestrictApplyToConfiguredBranch = restrictApplyValue(workspace.RestrictApplyToConfiguredBranch)
 	if workspace.Vcs != nil {
 		plan.VcsId = types.StringValue(workspace.Vcs.ID)
 	}
@@ -633,4 +658,10 @@ func (r *WorkspaceVcsResource) ImportState(ctx context.Context, req resource.Imp
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("organization_id"), idParts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), idParts[1])...)
+}
+
+// restrictApplyValue is false for a Terrakube before 2.34.0, which does not send the attribute and does not
+// restrict anything.
+func restrictApplyValue(restrict *bool) types.Bool {
+	return types.BoolValue(restrict != nil && *restrict)
 }

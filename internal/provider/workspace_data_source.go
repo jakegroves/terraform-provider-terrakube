@@ -47,6 +47,8 @@ type WorkspaceDataSourceModel struct {
 	SSHID                  types.String `tfsdk:"sshid"`
 	ModuleSshKey           types.String `tfsdk:"module_ssh_key"`
 	PolicyComplianceStatus types.String `tfsdk:"policy_compliance_status"`
+
+	RestrictApplyToConfiguredBranch types.Bool `tfsdk:"restrict_apply_to_configured_branch"`
 }
 
 func NewWorkspaceDataSource() datasource.DataSource {
@@ -149,6 +151,10 @@ func (d *WorkspaceDataSource) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"allowremoteapply": schema.BoolAttribute{
 				Description: "Allow remote apply",
+				Computed:    true,
+			},
+			"restrict_apply_to_configured_branch": schema.BoolAttribute{
+				Description: "Only allow apply and destroy from the configured branch. False for a Terrakube before 2.34.0",
 				Computed:    true,
 			},
 			"vcsid": schema.StringAttribute{
@@ -265,6 +271,7 @@ func (d *WorkspaceDataSource) Read(ctx context.Context, req datasource.ReadReque
 		state.ExecutionMode = types.StringValue(data.ExecutionMode)
 		state.Deleted = types.BoolValue(data.Deleted)
 		state.AllowRemoteApply = types.BoolValue(data.AllowRemoteApply)
+		state.RestrictApplyToConfiguredBranch = restrictApplyValue(data.RestrictApplyToConfiguredBranch)
 		if data.Vcs != nil {
 			state.VCSID = types.StringValue(data.Vcs.ID)
 		}

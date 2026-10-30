@@ -14,6 +14,10 @@ resource "terrakube_workspace_vcs" "sample1" {
   # Optional: use an org SSH key to download private Terraform/OpenTofu
   # modules referenced via git-based module sources in this workspace.
   module_ssh_key = terrakube_ssh.module_key.id
+
+  # Optional (Terrakube 2.34.0 or later): only allow apply and destroy from the
+  # branch above. Plan-only runs and terraform plan still work on any branch.
+  restrict_apply_to_configured_branch = true
 }
 
 # Repository accessed over raw SSH instead of an OAuth VCS connection.

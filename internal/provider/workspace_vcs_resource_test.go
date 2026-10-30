@@ -199,3 +199,111 @@ func TestWorkspaceVcsResource_Update_ResolvesProjectIdToNullWhenApiReturnsNoProj
 		t.Errorf("expected project_id to be null after update since the API returned no project, got: %v", result.ProjectId)
 	}
 }
+
+// createWithRestrictApply runs Create for a VCS workspace with the given plan value for
+// restrict_apply_to_configured_branch and answers with the given workspace attributes. It returns the request body
+// the provider sent and the resulting state.
+func createWithRestrictApply(t *testing.T, restrict tftypes.Value, responseExtra string) (string, WorkspaceVcsResourceModel) {
+	t.Helper()
+	ctx := context.Background()
+	s, objType := workspaceVcsSchemaAndType(t, ctx)
+
+	const orgID = "org-1"
+
+	var capturedBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/organization/"+orgID+"/workspace", func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("reading request body: %v", err)
+		}
+		capturedBody = body
+		fmt.Fprint(w, `{"data":{"type":"workspace","id":"ws-created-1","attributes":{`+
+			`"name":"my-workspace","description":null,"source":"https://example.com/repo.git",`+
+			`"branch":"main","folder":"/","defaultTemplate":"tmpl-1","iacType":"terraform",`+
+			`"terraformVersion":"1.12.0","executionMode":"remote","allowRemoteApply":false`+responseExtra+`},`+
+			`"relationships":{"project":{"data":null}}}}`)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	r := &WorkspaceVcsResource{client: server.Client(), endpoint: server.URL, token: "test-token"}
+
+	planValue := buildObjectValue(objType, map[string]tftypes.Value{
+		"organization_id":                     tftypes.NewValue(tftypes.String, orgID),
+		"name":                                tftypes.NewValue(tftypes.String, "my-workspace"),
+		"repository":                          tftypes.NewValue(tftypes.String, "https://example.com/repo.git"),
+		"template_id":                         tftypes.NewValue(tftypes.String, "tmpl-1"),
+		"iac_version":                         tftypes.NewValue(tftypes.String, "1.12.0"),
+		"branch":                              tftypes.NewValue(tftypes.String, "main"),
+		"folder":                              tftypes.NewValue(tftypes.String, "/"),
+		"iac_type":                            tftypes.NewValue(tftypes.String, "terraform"),
+		"execution_mode":                      tftypes.NewValue(tftypes.String, "remote"),
+		"allow_remote_apply":                  tftypes.NewValue(tftypes.Bool, false),
+		"project_id":                          tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		"restrict_apply_to_configured_branch": restrict,
+	})
+
+	req := resource.CreateRequest{Plan: tfsdk.Plan{Schema: s, Raw: planValue}}
+	resp := &resource.CreateResponse{State: tfsdk.State{Schema: s}}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Create returned diagnostics: %v", resp.Diagnostics)
+	}
+
+	var result WorkspaceVcsResourceModel
+	if diags := resp.State.Get(ctx, &result); diags.HasError() {
+		t.Fatalf("reading resulting state: %v", diags)
+	}
+	return string(capturedBody), result
+}
+
+func TestWorkspaceVcsResource_Schema_RestrictApplyIsOptionalAndComputed(t *testing.T) {
+	s, _ := workspaceVcsSchemaAndType(t, context.Background())
+
+	attr, ok := s.Attributes["restrict_apply_to_configured_branch"].(schema.BoolAttribute)
+	if !ok {
+		t.Fatalf("expected restrict_apply_to_configured_branch to be a BoolAttribute")
+	}
+	// Optional and computed with no default, so leaving it out never changes a value set elsewhere.
+	if !attr.Optional || !attr.Computed || attr.Default != nil {
+		t.Errorf("expected optional, computed and no default, got optional=%v computed=%v default=%v",
+			attr.Optional, attr.Computed, attr.Default)
+	}
+}
+
+func TestWorkspaceVcsResource_Create_SendsRestrictApplyWhenConfigured(t *testing.T) {
+	body, result := createWithRestrictApply(t, tftypes.NewValue(tftypes.Bool, true), `,"restrictApplyToConfiguredBranch":true`)
+
+	if !strings.Contains(body, `"restrictApplyToConfiguredBranch":true`) {
+		t.Errorf("expected the request body to carry restrictApplyToConfiguredBranch, got: %s", body)
+	}
+	if !result.RestrictApplyToConfiguredBranch.ValueBool() {
+		t.Errorf("expected restrict_apply_to_configured_branch to be true in state, got %v", result.RestrictApplyToConfiguredBranch)
+	}
+}
+
+func TestWorkspaceVcsResource_Create_OmitsRestrictApplyWhenNotConfigured(t *testing.T) {
+	// Left out of the config, the plan holds an unknown value. Sending it would fail against a Terrakube before
+	// 2.34.0 and would reset the setting for one that has it.
+	body, result := createWithRestrictApply(t, tftypes.NewValue(tftypes.Bool, tftypes.UnknownValue), `,"restrictApplyToConfiguredBranch":false`)
+
+	if strings.Contains(body, "restrictApplyToConfiguredBranch") {
+		t.Errorf("expected the request body to omit restrictApplyToConfiguredBranch, got: %s", body)
+	}
+	if result.RestrictApplyToConfiguredBranch.IsUnknown() || result.RestrictApplyToConfiguredBranch.ValueBool() {
+		t.Errorf("expected false in state, got %v", result.RestrictApplyToConfiguredBranch)
+	}
+}
+
+func TestWorkspaceVcsResource_Create_ReadsAsNotRestrictedFromATerrakubeThatDoesNotSendIt(t *testing.T) {
+	_, result := createWithRestrictApply(t, tftypes.NewValue(tftypes.Bool, tftypes.UnknownValue), "")
+
+	if result.RestrictApplyToConfiguredBranch.IsNull() || result.RestrictApplyToConfiguredBranch.IsUnknown() ||
+		result.RestrictApplyToConfiguredBranch.ValueBool() {
+		t.Errorf("expected a known false in state, got %v", result.RestrictApplyToConfiguredBranch)
+	}
+}

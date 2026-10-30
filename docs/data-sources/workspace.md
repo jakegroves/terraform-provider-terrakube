@@ -41,6 +41,7 @@ data "terrakube_workspace" "ws" {
 - `module_ssh_key` (String) SSH key ID used to download private Terraform/OpenTofu modules referenced via git-based module sources within this workspace
 - `organization_id` (String) organization ID
 - `policy_compliance_status` (String) OPA Policy compliance status: UNKNOWN, COMPLIANT, NON_COMPLIANT, or EXEMPTED
+- `restrict_apply_to_configured_branch` (Boolean) Only allow apply and destroy from the configured branch. False for a Terrakube before 2.34.0
 - `source` (String) Source
 - `sshid` (String) SSH key ID used to clone the workspace repository directly over SSH
 - `template_id` (String) template ID

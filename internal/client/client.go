@@ -77,6 +77,10 @@ type WorkspaceEntity struct {
 	AllowRemoteApply       bool           `jsonapi:"attr,allowRemoteApply"`
 	ModuleSshKey           *string        `jsonapi:"attr,moduleSshKey,omitempty"`
 	PolicyComplianceStatus string         `jsonapi:"attr,policyComplianceStatus,omitempty"`
+
+	// RestrictApplyToConfiguredBranch needs Terrakube 2.34.0 or later. A pointer with omitempty, so a Terrakube that
+	// does not know it is never sent it, and one that does keeps its value when the attribute is not configured.
+	RestrictApplyToConfiguredBranch *bool `jsonapi:"attr,restrictApplyToConfiguredBranch,omitempty"`
 }
 
 type WorkspaceTagEntity struct {
